@@ -12,6 +12,9 @@ struct SceneParameters{
 
 	GLuint		vertexArrayID;
 	GLuint		shader[2];
+	GLuint		gridShaderPVWRef;
+	GLuint		VerBuffer[2];
+	GLuint		BufferVerCount[2];
 
 	// Camera
 	Vector3f	Eye;
