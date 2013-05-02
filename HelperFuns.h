@@ -5,6 +5,7 @@
 #include "Math.h"
 
 struct SceneParameters{
+	static const GLfloat PI = 3.14159f;
 	// Window
 	GLuint		winWidth;
 	GLuint		winHeight;
@@ -21,6 +22,11 @@ struct SceneParameters{
 	Vector3f	Target;
 	Vector3f	Up;
 	Mat4x4		PVW;
+
+	// Сферические координаты
+	GLfloat alpha; 		// горизонтальное отклонение
+	GLfloat beta;  		// вертикальное отклонение
+	GLfloat sph_Radius; // радиус
 };
 
 extern SceneParameters gSceneParams;

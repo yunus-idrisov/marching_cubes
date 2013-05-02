@@ -4,11 +4,16 @@
 #include <GL/glfw.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include "HelperFuns.h"
+#include "MarchingCubes_LookupTables.h"
 using namespace std;
 
+const GLfloat SceneParameters::PI;
 SceneParameters gSceneParams;
-static void BuildGrid(GLfloat gridCellSize, GLint CellCount);
+static void AddGridToScene(GLfloat gridCellSize, GLint CellCount);
+static void AddCube();
+static void UpdateEyePos();
 
 int InitGL(int winWidth, int winHeight, int glver_major, int glver_minor){
 	if( !glfwInit() ){
@@ -32,14 +37,18 @@ int InitGL(int winWidth, int winHeight, int glver_major, int glver_minor){
 
 	glViewport(0, 0, winWidth, winHeight);
 
+	//Render in wireframe.
+	//glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
+	//glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
+
 	glEnable(GL_CULL_FACE);
 	glCullFace(GL_BACK);
 	glFrontFace(GL_CCW);
 
-	//glEnable(GL_DEPTH_TEST);
-	//glDepthFunc(GL_LESS);
-	//glDepthMask(GL_TRUE);
-	//glDepthRange(0.0f, 1.0f);
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LESS);
+	glDepthMask(GL_TRUE);
+	glDepthRange(0.0f, 1.0f);
 
 	glClearColor(0.1, 0.0, 0.35, 1.0f);
 	glClearDepth(1.0f);
@@ -53,7 +62,9 @@ int InitScene(){
 	glfwSetWindowTitle("Marching Cubes");
 	glfwEnable(GLFW_STICKY_KEYS);
 	gSceneParams.ratio = gSceneParams.winWidth/(float)gSceneParams.winHeight;
-
+	gSceneParams.alpha = gSceneParams.PI/4;
+	gSceneParams.beta = gSceneParams.PI/4;
+	gSceneParams.sph_Radius = 10;
 	// Создаём VertexArray.
 	glGenVertexArrays(1, &gSceneParams.vertexArrayID);
 	glBindVertexArray(gSceneParams.vertexArrayID);
@@ -67,7 +78,8 @@ int InitScene(){
 
 	gSceneParams.gridShaderPVWRef = glGetUniformLocation(gSceneParams.shader[0], "mPVW");
 
-	BuildGrid(1.0f, 10);
+	AddGridToScene(1.0f, 10);
+	AddCube();
 
 	// Camera setup.
 	Mat4x4 W, V, P;
@@ -78,7 +90,7 @@ int InitScene(){
 	gSceneParams.Up = up;
 	Mat4x4View(V, eye, target, up);
 	GLfloat r = gSceneParams.ratio;
-	Mat4x4Pers(P, 3.14159f/4, r, 0.1f, 30.0f);
+	Mat4x4Pers(P, gSceneParams.PI/4, r, 0.1f, 30.0f);
 	Mat4x4Mult(gSceneParams.PVW, V, W);
 	Mat4x4Mult(gSceneParams.PVW, P, gSceneParams.PVW);
 
@@ -238,9 +250,23 @@ void UpdateScene(){
 	GLfloat deltaTime = glfwGetTime() - lastTime;
 
 	// Update code here.
+	if( glfwGetKey(GLFW_KEY_LEFT) == GLFW_PRESS ){
+		gSceneParams.alpha += 3.0f*deltaTime;
+	}
+	if( glfwGetKey(GLFW_KEY_RIGHT) == GLFW_PRESS ){
+		gSceneParams.alpha -= 3.0f*deltaTime;
+	}
+	if( glfwGetKey(GLFW_KEY_UP) == GLFW_PRESS ){
+		if( gSceneParams.beta  < (gSceneParams.PI/2.0f - 0.1f) )
+			gSceneParams.beta += 3.0f*deltaTime;
+	}
+	if( glfwGetKey(GLFW_KEY_DOWN) == GLFW_PRESS ){
+		if( gSceneParams.beta > (-gSceneParams.PI/2.0f + 0.1f) ) 
+			gSceneParams.beta -= 3.0f*deltaTime;
+	}
+	UpdateEyePos();
 
 	lastTime = glfwGetTime();
-
 	// Вычисление FPS.
 	static double startTime = glfwGetTime();
 	static int FPS = 0;
@@ -254,7 +280,6 @@ void UpdateScene(){
 
 void RenderScene(){
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	//glUseProgram(gSceneParams.shader);
 	
 	// Сначала рендерим сетку.
 	glUseProgram( gSceneParams.shader[0] );
@@ -265,13 +290,27 @@ void RenderScene(){
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex_Pos_Col), (void*)0);
 	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex_Pos_Col), (void*)(sizeof(GLfloat)*3));
 	glDrawArrays(GL_LINES, 0, gSceneParams.BufferVerCount[0]);
-
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glDisableVertexAttribArray(0);
 	glDisableVertexAttribArray(1);
+	glUseProgram( 0 );
+
+	// Теперь кубы.
+	glUseProgram( gSceneParams.shader[0] );
+	glEnableVertexAttribArray(0);
+	glEnableVertexAttribArray(1);
+	glBindBuffer(GL_ARRAY_BUFFER, gSceneParams.VerBuffer[1]);
+	glUniformMatrix4fv( gSceneParams.gridShaderPVWRef, 1, GL_TRUE, gSceneParams.PVW.m );
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex_Pos_Col), (void*)0);
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex_Pos_Col), (void*)(sizeof(GLfloat)*3));
+	glDrawArrays(GL_TRIANGLES, 0, gSceneParams.BufferVerCount[1]);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glDisableVertexAttribArray(0);
+	glDisableVertexAttribArray(1);
+	glUseProgram( 0 );
 }
 
-static void BuildGrid(GLfloat gridCellSize, GLint CellCount){
+static void AddGridToScene(GLfloat gridCellSize, GLint CellCount){
 	if( CellCount < 2 )
 		CellCount = 2;
 	if( (CellCount % 2) != 0 )
@@ -329,7 +368,72 @@ static void BuildGrid(GLfloat gridCellSize, GLint CellCount){
 	gSceneParams.BufferVerCount[0] = verCount;
 }
 
+static void AddCube(){
+	GLuint edge_to_points[12][2] = { {0,1}, {1,2}, {2,3}, {3,0},
+									 {4,5}, {5,6}, {6,7}, {7,4},
+									 {0,4}, {1,5}, {2,6}, {3,7} };
+
+	GLfloat d = 1.0f;
+	Vertex_Pos_Col vertices[8] = {
+		{ -d,-d, d, 1,0,1 },
+		{ -d, d, d, 0,1,0 },
+		{  d, d, d, 0,1,0 },
+		{  d,-d, d, 1,0,1 },
+		{ -d,-d,-d, 1,0,1 },
+		{ -d, d,-d, 0,1,0 },
+		{  d, d,-d, 0,1,0 },
+		{  d,-d,-d, 1,0,1 },
+	};
+
+	unsigned char cube_case = 193;
+	
+	GLuint triNum = case_to_polygon_num[cube_case];
+	GLuint verNum = triNum*3;
+	Vertex_Pos_Col triangles[verNum];
+	GLuint v = 0;
+	for(int i = 0; i < triNum; i++){
+		GLuint e[3] = { case_edges[cube_case][i][0],
+						case_edges[cube_case][i][1],
+						case_edges[cube_case][i][2] };
+
+		for(int j = 0; j < 3; j++){
+			GLuint v1 = edge_to_points[e[j]][0];
+			GLuint v2 = edge_to_points[e[j]][1];
+
+			triangles[v].pos.x = (vertices[v1].pos.x + vertices[v2].pos.x)/2.0f;
+			triangles[v].pos.y = (vertices[v1].pos.y + vertices[v2].pos.y)/2.0f;
+			triangles[v].pos.z = (vertices[v1].pos.z + vertices[v2].pos.z)/2.0f;
+			triangles[v].color.x = (vertices[v1].color.x + vertices[v2].color.x)/2.0f;
+			triangles[v].color.y = (vertices[v1].color.y + vertices[v2].color.y)/2.0f;
+			triangles[v].color.z = (vertices[v1].color.z + vertices[v2].color.z)/2.0f;
+			v++;
+		}
+	}
+
+	glGenBuffers(1, &gSceneParams.VerBuffer[1]);
+	glBindBuffer(GL_ARRAY_BUFFER, gSceneParams.VerBuffer[1]);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex_Pos_Col)*verNum, triangles, GL_STATIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	gSceneParams.BufferVerCount[1] = verNum;
+}
+
+static void UpdateEyePos(){
+	gSceneParams.Eye.x = gSceneParams.sph_Radius*cosf(gSceneParams.beta)*cosf(gSceneParams.alpha);
+	gSceneParams.Eye.y = gSceneParams.sph_Radius*sinf(gSceneParams.beta);
+	gSceneParams.Eye.z = gSceneParams.sph_Radius*cosf(gSceneParams.beta)*sinf(gSceneParams.alpha);
+
+	Mat4x4 W, V, P;
+	Mat4x4Identity(W);
+	Mat4x4View(V, gSceneParams.Eye, gSceneParams.Target, gSceneParams.Up);
+	GLfloat r = gSceneParams.ratio;
+	Mat4x4Pers(P, gSceneParams.PI/4, r, 0.1f, 30.0f);
+	Mat4x4Mult(gSceneParams.PVW, V, W);
+	Mat4x4Mult(gSceneParams.PVW, P, gSceneParams.PVW);
+}
+
 void ReleaseSceneResources(){
 	glDeleteVertexArrays(1, &gSceneParams.vertexArrayID);
-	//glDeleteProgram(gSceneParams.shader);
+
+	glDeleteBuffers(1, &gSceneParams.VerBuffer[0]);
+	glDeleteProgram(gSceneParams.shader[0]);
 }

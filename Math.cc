@@ -55,7 +55,6 @@ void Mat4x4View(Mat4x4& m, const Vector3f& Eye, const Vector3f& Target, const Ve
 
 	Vector3f v;
 	Vec3CrossProduct(v, w, u);
-	Vec3Normalize(v);
 	m._11 = u.x; m._12 = u.y; m._13 = u.z; m._14 = -Vec3DotProduct(u,Eye);
 	m._21 = v.x; m._22 = v.y; m._23 = v.z; m._24 = -Vec3DotProduct(v,Eye);
 	m._31 = w.x; m._32 = w.y; m._33 = w.z; m._34 = -Vec3DotProduct(w,Eye);
