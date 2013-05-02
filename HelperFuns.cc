@@ -13,7 +13,6 @@ const GLfloat SceneParameters::PI;
 SceneParameters gSceneParams;
 static void AddGridToScene(GLfloat gridCellSize, GLint CellCount);
 static void AddCube();
-static void UpdateEyePos();
 
 int InitGL(int winWidth, int winHeight, int glver_major, int glver_minor){
 	if( !glfwInit() ){
@@ -37,8 +36,9 @@ int InitGL(int winWidth, int winHeight, int glver_major, int glver_minor){
 
 	glViewport(0, 0, winWidth, winHeight);
 
-	//Render in wireframe.
+	// Сетка.
 	//glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
+	// Обычный режим.
 	//glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
 
 	glEnable(GL_CULL_FACE);
@@ -62,9 +62,7 @@ int InitScene(){
 	glfwSetWindowTitle("Marching Cubes");
 	glfwEnable(GLFW_STICKY_KEYS);
 	gSceneParams.ratio = gSceneParams.winWidth/(float)gSceneParams.winHeight;
-	gSceneParams.alpha = gSceneParams.PI/4;
-	gSceneParams.beta = gSceneParams.PI/4;
-	gSceneParams.sph_Radius = 10;
+	gSceneParams.cam = Camera();
 	// Создаём VertexArray.
 	glGenVertexArrays(1, &gSceneParams.vertexArrayID);
 	glBindVertexArray(gSceneParams.vertexArrayID);
@@ -80,20 +78,6 @@ int InitScene(){
 
 	AddGridToScene(1.0f, 10);
 	AddCube();
-
-	// Camera setup.
-	Mat4x4 W, V, P;
-	Mat4x4Identity(W);
-	Vector3f eye = {7, 7, 7}, target = {0,0,0}, up = {0,1,0};
-	gSceneParams.Eye = eye;
-	gSceneParams.Target = target;
-	gSceneParams.Up = up;
-	Mat4x4View(V, eye, target, up);
-	GLfloat r = gSceneParams.ratio;
-	Mat4x4Pers(P, gSceneParams.PI/4, r, 0.1f, 30.0f);
-	Mat4x4Mult(gSceneParams.PVW, V, W);
-	Mat4x4Mult(gSceneParams.PVW, P, gSceneParams.PVW);
-
 	return 1;
 }
 
@@ -249,22 +233,21 @@ void UpdateScene(){
 	static double lastTime = glfwGetTime();
 	GLfloat deltaTime = glfwGetTime() - lastTime;
 
-	// Update code here.
-	if( glfwGetKey(GLFW_KEY_LEFT) == GLFW_PRESS ){
-		gSceneParams.alpha += 3.0f*deltaTime;
-	}
-	if( glfwGetKey(GLFW_KEY_RIGHT) == GLFW_PRESS ){
-		gSceneParams.alpha -= 3.0f*deltaTime;
-	}
-	if( glfwGetKey(GLFW_KEY_UP) == GLFW_PRESS ){
-		if( gSceneParams.beta  < (gSceneParams.PI/2.0f - 0.1f) )
-			gSceneParams.beta += 3.0f*deltaTime;
-	}
-	if( glfwGetKey(GLFW_KEY_DOWN) == GLFW_PRESS ){
-		if( gSceneParams.beta > (-gSceneParams.PI/2.0f + 0.1f) ) 
-			gSceneParams.beta -= 3.0f*deltaTime;
-	}
-	UpdateEyePos();
+	if( glfwGetKey(GLFW_KEY_LEFT) == GLFW_PRESS )
+		gSceneParams.cam.SetAlpha( gSceneParams.cam.GetAlpha() + 3*deltaTime );
+
+	if( glfwGetKey(GLFW_KEY_RIGHT) == GLFW_PRESS )
+		gSceneParams.cam.SetAlpha( gSceneParams.cam.GetAlpha() - 3*deltaTime );
+
+	if( glfwGetKey(GLFW_KEY_UP) == GLFW_PRESS )
+		if( (gSceneParams.cam.GetBeta() + 3.0f*deltaTime) < gSceneParams.PI/2.0f )
+			gSceneParams.cam.SetBeta( gSceneParams.cam.GetBeta() + 3*deltaTime );
+
+	if( glfwGetKey(GLFW_KEY_DOWN) == GLFW_PRESS )
+		if( (gSceneParams.cam.GetBeta() - 3.0f*deltaTime) > -gSceneParams.PI/2.0f )
+			gSceneParams.cam.SetBeta( gSceneParams.cam.GetBeta() - 3*deltaTime );
+
+	gSceneParams.cam.CalculatePV();
 
 	lastTime = glfwGetTime();
 	// Вычисление FPS.
@@ -286,7 +269,7 @@ void RenderScene(){
 	glEnableVertexAttribArray(0);
 	glEnableVertexAttribArray(1);
 	glBindBuffer(GL_ARRAY_BUFFER, gSceneParams.VerBuffer[0]);
-	glUniformMatrix4fv( gSceneParams.gridShaderPVWRef, 1, GL_TRUE, gSceneParams.PVW.m );
+	glUniformMatrix4fv( gSceneParams.gridShaderPVWRef, 1, GL_TRUE, gSceneParams.cam.GetPV().m );
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex_Pos_Col), (void*)0);
 	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex_Pos_Col), (void*)(sizeof(GLfloat)*3));
 	glDrawArrays(GL_LINES, 0, gSceneParams.BufferVerCount[0]);
@@ -300,7 +283,7 @@ void RenderScene(){
 	glEnableVertexAttribArray(0);
 	glEnableVertexAttribArray(1);
 	glBindBuffer(GL_ARRAY_BUFFER, gSceneParams.VerBuffer[1]);
-	glUniformMatrix4fv( gSceneParams.gridShaderPVWRef, 1, GL_TRUE, gSceneParams.PVW.m );
+	glUniformMatrix4fv( gSceneParams.gridShaderPVWRef, 1, GL_TRUE, gSceneParams.cam.GetPV().m );
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex_Pos_Col), (void*)0);
 	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex_Pos_Col), (void*)(sizeof(GLfloat)*3));
 	glDrawArrays(GL_TRIANGLES, 0, gSceneParams.BufferVerCount[1]);
@@ -417,23 +400,10 @@ static void AddCube(){
 	gSceneParams.BufferVerCount[1] = verNum;
 }
 
-static void UpdateEyePos(){
-	gSceneParams.Eye.x = gSceneParams.sph_Radius*cosf(gSceneParams.beta)*cosf(gSceneParams.alpha);
-	gSceneParams.Eye.y = gSceneParams.sph_Radius*sinf(gSceneParams.beta);
-	gSceneParams.Eye.z = gSceneParams.sph_Radius*cosf(gSceneParams.beta)*sinf(gSceneParams.alpha);
-
-	Mat4x4 W, V, P;
-	Mat4x4Identity(W);
-	Mat4x4View(V, gSceneParams.Eye, gSceneParams.Target, gSceneParams.Up);
-	GLfloat r = gSceneParams.ratio;
-	Mat4x4Pers(P, gSceneParams.PI/4, r, 0.1f, 30.0f);
-	Mat4x4Mult(gSceneParams.PVW, V, W);
-	Mat4x4Mult(gSceneParams.PVW, P, gSceneParams.PVW);
-}
-
 void ReleaseSceneResources(){
 	glDeleteVertexArrays(1, &gSceneParams.vertexArrayID);
 
 	glDeleteBuffers(1, &gSceneParams.VerBuffer[0]);
+	glDeleteBuffers(1, &gSceneParams.VerBuffer[1]);
 	glDeleteProgram(gSceneParams.shader[0]);
 }

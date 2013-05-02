@@ -1,7 +1,7 @@
 #ifndef HELPERFUNS_H
 #define HELPERFUNS_H
 #include <GL/gl.h>
-#include <vector>
+#include "Camera.h"
 #include "Math.h"
 
 struct SceneParameters{
@@ -17,16 +17,7 @@ struct SceneParameters{
 	GLuint		VerBuffer[2];
 	GLuint		BufferVerCount[2];
 
-	// Camera
-	Vector3f	Eye;
-	Vector3f	Target;
-	Vector3f	Up;
-	Mat4x4		PVW;
-
-	// Сферические координаты
-	GLfloat alpha; 		// горизонтальное отклонение
-	GLfloat beta;  		// вертикальное отклонение
-	GLfloat sph_Radius; // радиус
+	Camera 		cam;
 };
 
 extern SceneParameters gSceneParams;
