@@ -71,16 +71,16 @@ int InitScene(){
 
 	// Camera setup.
 	Mat4x4 W, V, P;
-	Mat4x4Identity(&W);
+	Mat4x4Identity(W);
 	Vector3f eye = {7, 7, 7}, target = {0,0,0}, up = {0,1,0};
 	gSceneParams.Eye = eye;
 	gSceneParams.Target = target;
 	gSceneParams.Up = up;
-	Mat4x4View(&V, &eye, &target, &up);
+	Mat4x4View(V, eye, target, up);
 	GLfloat r = gSceneParams.ratio;
-	Mat4x4Pers(&P, 3.14159f/4, r, 0.1f, 30.0f);
-	Mat4x4Mult(&gSceneParams.PVW, &V, &W);
-	Mat4x4Mult(&gSceneParams.PVW, &P, &gSceneParams.PVW);
+	Mat4x4Pers(P, 3.14159f/4, r, 0.1f, 30.0f);
+	Mat4x4Mult(gSceneParams.PVW, V, W);
+	Mat4x4Mult(gSceneParams.PVW, P, gSceneParams.PVW);
 
 	return 1;
 }
@@ -289,7 +289,6 @@ static void BuildGrid(GLfloat gridCellSize, GLint CellCount){
 	}
 
 	GLfloat t = -(cc/2)*gridCellSize;
-	cout << t << endl;
 	GLuint v = 0;
 	for(int i = 0; i <= cc; i++){
 		gridVers[v].pos.x = t + i*gridCellSize;
