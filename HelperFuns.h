@@ -17,7 +17,7 @@ struct SceneParameters{
 	GLuint		VerBuffer[2];
 	GLuint		BufferVerCount[2];
 
-	Camera 		cam;
+	Camera cam;
 };
 
 extern SceneParameters gSceneParams;

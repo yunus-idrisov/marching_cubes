@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 #include <fstream>
+#include <vector>
 #include <GL/glfw.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,6 +14,9 @@ const GLfloat SceneParameters::PI;
 SceneParameters gSceneParams;
 static void AddGridToScene(GLfloat gridCellSize, GLint CellCount);
 static void AddCube();
+// Случайное число в диапазоне [-1,1].
+static GLfloat GetRand(){ return (rand()/float(RAND_MAX))*2 - 1.0f; }
+static void AddMarchingObject(GLuint width, GLuint height, GLuint depth, GLfloat cubeSize);
 
 int InitGL(int winWidth, int winHeight, int glver_major, int glver_minor){
 	if( !glfwInit() ){
@@ -60,7 +64,7 @@ int InitGL(int winWidth, int winHeight, int glver_major, int glver_minor){
 
 int InitScene(){
 	glfwSetWindowTitle("Marching Cubes");
-	glfwEnable(GLFW_STICKY_KEYS);
+	//glfwEnable(GLFW_STICKY_KEYS);
 	gSceneParams.ratio = gSceneParams.winWidth/(float)gSceneParams.winHeight;
 	gSceneParams.cam = Camera();
 	// Создаём VertexArray.
@@ -78,6 +82,9 @@ int InitScene(){
 
 	AddGridToScene(1.0f, 10);
 	AddCube();
+	//AddMarchingObject(4, 3, 5, 1.0f);
+	GLuint s = 64;
+	AddMarchingObject(s,s,s, 1.0f);
 	return 1;
 }
 
@@ -246,8 +253,26 @@ void UpdateScene(){
 	if( glfwGetKey(GLFW_KEY_DOWN) == GLFW_PRESS )
 		if( (gSceneParams.cam.GetBeta() - 3.0f*deltaTime) > -gSceneParams.PI/2.0f )
 			gSceneParams.cam.SetBeta( gSceneParams.cam.GetBeta() - 3*deltaTime );
-
 	gSceneParams.cam.CalculatePV();
+
+	static bool wireSwitch = true;
+	static bool OneKeyPrevState = false;
+	if( glfwGetKey('1') == GLFW_PRESS ){
+		if( !OneKeyPrevState ){
+			OneKeyPrevState = true;
+			if( wireSwitch ){
+				glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+				glDisable(GL_CULL_FACE);
+				wireSwitch ^= 1;
+			}
+			else{
+				glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+				glEnable(GL_CULL_FACE);
+				wireSwitch ^= 1;
+			}
+		}
+	}
+	else OneKeyPrevState = false;
 
 	lastTime = glfwGetTime();
 	// Вычисление FPS.
@@ -287,6 +312,7 @@ void RenderScene(){
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex_Pos_Col), (void*)0);
 	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex_Pos_Col), (void*)(sizeof(GLfloat)*3));
 	glDrawArrays(GL_TRIANGLES, 0, gSceneParams.BufferVerCount[1]);
+	//glDrawArrays(GL_POINTS, 0, gSceneParams.BufferVerCount[1]);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glDisableVertexAttribArray(0);
 	glDisableVertexAttribArray(1);
@@ -358,17 +384,24 @@ static void AddCube(){
 
 	GLfloat d = 1.0f;
 	Vertex_Pos_Col vertices[8] = {
-		{ -d,-d, d, 1,0,1 },
+		{ -d,-d, d, 1,1,0 },
 		{ -d, d, d, 0,1,0 },
 		{  d, d, d, 0,1,0 },
-		{  d,-d, d, 1,0,1 },
-		{ -d,-d,-d, 1,0,1 },
+		{  d,-d, d, 1,1,0 },
+		{ -d,-d,-d, 1,1,0 },
 		{ -d, d,-d, 0,1,0 },
 		{  d, d,-d, 0,1,0 },
-		{  d,-d,-d, 1,0,1 },
+		{  d,-d,-d, 1,1,0 },
 	};
 
-	unsigned char cube_case = 193;
+	GLfloat vd[8];
+	srand(time(0));
+	for(int i = 0; i < 8; i++)
+		vd[i] = GetRand();
+	unsigned char cube_case = 0;
+	for(int i = 0; i < 8; i++)
+		if( vd[i] > 0.0f )
+			cube_case |= (1 << i);
 	
 	GLuint triNum = case_to_polygon_num[cube_case];
 	GLuint verNum = triNum*3;
@@ -383,9 +416,12 @@ static void AddCube(){
 			GLuint v1 = edge_to_points[e[j]][0];
 			GLuint v2 = edge_to_points[e[j]][1];
 
-			triangles[v].pos.x = (vertices[v1].pos.x + vertices[v2].pos.x)/2.0f;
-			triangles[v].pos.y = (vertices[v1].pos.y + vertices[v2].pos.y)/2.0f;
-			triangles[v].pos.z = (vertices[v1].pos.z + vertices[v2].pos.z)/2.0f;
+			triangles[v].pos.x = vertices[v1].pos.x + (vertices[v2].pos.x - vertices[v1].pos.x)*
+								  fabs(vd[v1])/(fabs(vd[v1]) + fabs(vd[v2]));
+			triangles[v].pos.y = vertices[v1].pos.y + (vertices[v2].pos.y - vertices[v1].pos.y)*
+								  fabs(vd[v1])/(fabs(vd[v1]) + fabs(vd[v2]));
+			triangles[v].pos.z = vertices[v1].pos.z + (vertices[v2].pos.z - vertices[v1].pos.z)*
+								  fabs(vd[v1])/(fabs(vd[v1]) + fabs(vd[v2]));
 			triangles[v].color.x = (vertices[v1].color.x + vertices[v2].color.x)/2.0f;
 			triangles[v].color.y = (vertices[v1].color.y + vertices[v2].color.y)/2.0f;
 			triangles[v].color.z = (vertices[v1].color.z + vertices[v2].color.z)/2.0f;
@@ -398,6 +434,127 @@ static void AddCube(){
 	glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex_Pos_Col)*verNum, triangles, GL_STATIC_DRAW);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	gSceneParams.BufferVerCount[1] = verNum;
+}
+
+static void AddMarchingObject(GLuint width, GLuint height, GLuint depth, GLfloat cubeSize){
+	if( cubeSize <= 0.0f )
+		cubeSize = 1.0f;
+	if( width == 0 ) width++;
+	if( height == 0 ) height++;
+	if( depth == 0 ) depth++;
+
+	GLuint verNum = (depth+1)*(height+1)*(width+1);
+
+	// depth - y, height - z, width - x.
+	GLfloat ver_den[verNum]; // плотность в каждой точке.
+
+	GLfloat y_init = -(GLfloat)depth/2*cubeSize;
+	GLfloat z_init =  (GLfloat)height/2*cubeSize;
+	GLfloat x_init = -(GLfloat)width/2*cubeSize;
+
+	GLfloat x,y = y_init,z;
+	for(int i = 0; i <= depth; i++){
+		z =  z_init;
+		for(int j = 0; j <= height; j++){
+			x = x_init;
+			for(int k = 0; k <= width; k++){
+				Vector3f vec3 = {x, y, z};
+				GLuint verCoord = i*(width+1)*(height+1) + j*(width+1) + k;
+
+				// НЕОБХОДИМО ДОБАВИТЬ ФУНКЦИЮ. -----------------------------------------------------
+
+				if((vec3.x*vec3.x + vec3.y*vec3.y + vec3.z*vec3.z) < 3*3)
+					ver_den[verCoord] =  1;
+				else
+					ver_den[verCoord] = -1;
+
+				x += cubeSize;
+			}
+			z -= cubeSize;
+		}
+		y += cubeSize;
+	}
+
+	GLuint edge_to_points[12][2] = { {0,1}, {1,2}, {2,3}, {3,0},
+									 {4,5}, {5,6}, {6,7}, {7,4},
+									 {0,4}, {1,5}, {2,6}, {3,7} };
+	Vector3f cube_vertices[8];
+	GLfloat  cube_den[8];
+	vector<Vertex_Pos_Col> mc_vertices;
+	Vector3f vec3 = {x_init, y_init, z_init};
+	for(int i = 0; i < depth; i++){
+		vec3.z =  z_init;
+		for(int j = 0; j < height; j++){
+			vec3.x = x_init;
+			for(int k = 0; k < width; k++){
+				for(int i1 = 0; i1 < 8; i1++)
+					cube_vertices[i1] = vec3;
+				//0
+				cube_vertices[0] = vec3;
+				cube_den[0] = ver_den[i*(width+1)*(height+1) + j*(width+1) + k];
+				//1
+				cube_vertices[1].y += cubeSize;
+				cube_den[1] = ver_den[(i+1)*(width+1)*(height+1) + j*(width+1) + k];
+				//2
+				cube_vertices[2].y += cubeSize; cube_vertices[2].x += cubeSize;
+				cube_den[2] = ver_den[(i+1)*(width+1)*(height+1) + j*(width+1) + k + 1];
+				//3
+				cube_vertices[3].x += cubeSize;
+				cube_den[3] = ver_den[i*(width+1)*(height+1) + j*(width+1) + k + 1];
+				//4
+				cube_vertices[4].z -= cubeSize;
+				cube_den[4] = ver_den[i*(width+1)*(height+1) + (j+1)*(width+1) + k];
+				//5
+				cube_vertices[5].y += cubeSize; cube_vertices[5].z -= cubeSize;
+				cube_den[5] = ver_den[(i+1)*(width+1)*(height+1) + (j+1)*(width+1) + k];
+				//6
+				cube_vertices[6].y += cubeSize; cube_vertices[6].z -= cubeSize; cube_vertices[6].x += cubeSize;
+				cube_den[6] = ver_den[(i+1)*(width+1)*(height+1) + (j+1)*(width+1) + k + 1];
+				//7
+				cube_vertices[7].z -= cubeSize; cube_vertices[7].x += cubeSize;
+				cube_den[7] = ver_den[i*(width+1)*(height+1) + (j+1)*(width+1) + k + 1];
+
+				GLubyte cube_case = 0;
+				for(int i1 = 0; i1 < 8; i1++)
+					if( cube_den[i1] > 0.0f )
+						cube_case |= (1 << i1);
+				if( cube_case == 0 || cube_case == 255 ){
+					vec3.x += cubeSize;
+					continue;
+				}
+				
+				Vertex_Pos_Col tri_ver;
+				GLuint triNum = case_to_polygon_num[cube_case];
+				for(int i1 = 0; i1 < triNum; i1++){
+					GLuint e[3] = { case_edges[cube_case][i1][0],
+									case_edges[cube_case][i1][1],
+									case_edges[cube_case][i1][2] };
+
+					for(int j1 = 0; j1 < 3; j1++){
+						GLuint v1 = edge_to_points[e[j1]][0];
+						GLuint v2 = edge_to_points[e[j1]][1];
+						GLfloat r = fabs(cube_den[v1])/(fabs(cube_den[v1]) + fabs(cube_den[v2]));
+
+						tri_ver.pos.x = cube_vertices[v1].x + (cube_vertices[v2].x - cube_vertices[v1].x)*r;
+						tri_ver.pos.y = cube_vertices[v1].y + (cube_vertices[v2].y - cube_vertices[v1].y)*r;
+						tri_ver.pos.z = cube_vertices[v1].z + (cube_vertices[v2].z - cube_vertices[v1].z)*r;
+						Vector3f col = { (GetRand() + 1.0f)/2, (GetRand() + 1.0f)/2, (GetRand() + 1.0f)/2 };
+						tri_ver.color = col;
+						mc_vertices.push_back(tri_ver);
+					}
+				}
+				vec3.x += cubeSize;
+			}
+			vec3.z -= cubeSize;
+		}
+		vec3.y += cubeSize;
+	}
+
+	glGenBuffers(1, &gSceneParams.VerBuffer[1]);
+	glBindBuffer(GL_ARRAY_BUFFER, gSceneParams.VerBuffer[1]);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex_Pos_Col)*mc_vertices.size(), &mc_vertices[0], GL_STATIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	gSceneParams.BufferVerCount[1] = mc_vertices.size();
 }
 
 void ReleaseSceneResources(){
