@@ -15,6 +15,11 @@ struct SceneParameters{
 	GLuint		vertexArrayID;
 	GLuint		shader[2];
 	GLuint		gridShaderPVWRef;
+
+	GLuint		mcShaderPVW_Ref;
+	GLuint		mcShaderW_Ref;
+	Mat4x4		mcW;
+
 	GLuint		VerBuffer[2];
 	GLuint		BufferVerCount[2];
 
@@ -53,6 +58,11 @@ void ReleaseSceneResources();
 struct Vertex_Pos_Col{
 	Vector3f pos;
 	Vector3f color;
+};
+
+struct Vertex_Pos_Nor{
+	Vector3f pos;
+	Vector3f nor;
 };
 
 #endif // HELPERFUNS_H

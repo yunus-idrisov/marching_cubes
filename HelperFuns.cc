@@ -20,6 +20,7 @@ static GLfloat GetRand(){ return (rand()/float(RAND_MAX))*2 - 1.0f; }
 static void AddMarchingObject(GLuint width, GLuint height, GLuint depth, GLfloat cubeSize);
 static void InputHandler(GLfloat deltaTime);
 static void MouseWheelHandler(GLint pos);
+static Vector3f NormalFrom3Points(Vector3f v1, Vector3f v2, Vector3f v3);
 
 int InitGL(int winWidth, int winHeight, int glver_major, int glver_minor){
 	if( !glfwInit() ){
@@ -76,18 +77,26 @@ int InitScene(){
 	glGenVertexArrays(1, &gSceneParams.vertexArrayID);
 	glBindVertexArray(gSceneParams.vertexArrayID);
 
-	// Создаём шейдер.
+	// Создаём шейдеры.
 	gSceneParams.shader[0] = CreateProgram("grid.vs", "grid.fs");
 	if( gSceneParams.shader[0] == 0 ){
 		cerr <<  "Failed to create shader." << endl;
 		return -1;
 	}
-
 	gSceneParams.gridShaderPVWRef = glGetUniformLocation(gSceneParams.shader[0], "mPVW");
+
+	gSceneParams.shader[1] = CreateProgram("mar_cubes.vs", "mar_cubes.fs");
+	if( gSceneParams.shader[1] == 0 ){
+		cerr <<  "Failed to create shader." << endl;
+		return -1;
+	}
+	gSceneParams.mcShaderPVW_Ref = glGetUniformLocation(gSceneParams.shader[1], "mPVW");
+	gSceneParams.mcShaderW_Ref = glGetUniformLocation(gSceneParams.shader[1], "mW");
+	Mat4x4Identity( gSceneParams.mcW );
 
 	AddGridToScene(1.0f, 10);
 	GLuint s = 64;
-	AddMarchingObject(s,s,s, 1.0f);
+	AddMarchingObject(s,s,s, 0.1f);
 	return 1;
 }
 
@@ -274,16 +283,18 @@ void RenderScene(){
 	glDisableVertexAttribArray(1);
 	glUseProgram( 0 );
 
+	Mat4x4 PVW = gSceneParams.cam.GetPV();
+	Mat4x4Mult(PVW, PVW, gSceneParams.mcW);
 	// Теперь кубы.
-	glUseProgram( gSceneParams.shader[0] );
+	glUseProgram( gSceneParams.shader[1] );
 	glEnableVertexAttribArray(0);
 	glEnableVertexAttribArray(1);
 	glBindBuffer(GL_ARRAY_BUFFER, gSceneParams.VerBuffer[1]);
-	glUniformMatrix4fv( gSceneParams.gridShaderPVWRef, 1, GL_TRUE, gSceneParams.cam.GetPV().m );
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex_Pos_Col), (void*)0);
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex_Pos_Col), (void*)(sizeof(GLfloat)*3));
+	glUniformMatrix4fv( gSceneParams.mcShaderPVW_Ref, 1, GL_TRUE, PVW.m );
+	glUniformMatrix4fv( gSceneParams.mcShaderW_Ref, 1, GL_TRUE, gSceneParams.mcW.m );
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex_Pos_Nor), (void*)0);
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex_Pos_Nor), (void*)(sizeof(GLfloat)*3));
 	glDrawArrays(GL_TRIANGLES, 0, gSceneParams.BufferVerCount[1]);
-	//glDrawArrays(GL_POINTS, 0, gSceneParams.BufferVerCount[1]);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glDisableVertexAttribArray(0);
 	glDisableVertexAttribArray(1);
@@ -373,7 +384,9 @@ static void AddMarchingObject(GLuint width, GLuint height, GLuint depth, GLfloat
 				Vector3f vec3 = {x, y, z};
 				GLuint verCoord = i*(width+1)*(height+1) + j*(width+1) + k;
 
-				// НЕОБХОДИМО ДОБАВИТЬ ФУНКЦИЮ. -----------------------------------------------------
+//--------------------------------------------------------------------------------------------------
+//--------------------------- НЕОБХОДИМО ДОБАВИТЬ ФУНКЦИЮ ------------------------------------------
+//--------------------------------------------------------------------------------------------------
 
 				if((vec3.x*vec3.x + vec3.y*vec3.y + vec3.z*vec3.z) < 3*3)
 					ver_den[verCoord] =  1;
@@ -392,7 +405,7 @@ static void AddMarchingObject(GLuint width, GLuint height, GLuint depth, GLfloat
 									 {0,4}, {1,5}, {2,6}, {3,7} };
 	Vector3f cube_vertices[8];
 	GLfloat  cube_den[8];
-	vector<Vertex_Pos_Col> mc_vertices;
+	vector<Vertex_Pos_Nor> mc_vertices;
 	Vector3f vec3 = {x_init, y_init, z_init};
 	for(int i = 0; i < depth; i++){
 		vec3.z =  z_init;
@@ -435,7 +448,7 @@ static void AddMarchingObject(GLuint width, GLuint height, GLuint depth, GLfloat
 					continue;
 				}
 				
-				Vertex_Pos_Col tri_ver;
+				Vertex_Pos_Nor tri_ver;
 				GLuint triNum = case_to_polygon_num[cube_case];
 				for(int i1 = 0; i1 < triNum; i1++){
 					GLuint e[3] = { case_edges[cube_case][i1][0],
@@ -447,13 +460,20 @@ static void AddMarchingObject(GLuint width, GLuint height, GLuint depth, GLfloat
 						GLuint v2 = edge_to_points[e[j1]][1];
 						GLfloat r = fabs(cube_den[v1])/(fabs(cube_den[v1]) + fabs(cube_den[v2]));
 
+						// Вычисляем координаты вершины треугольника
+						// на основе координат и весов вершин куба.
 						tri_ver.pos.x = cube_vertices[v1].x + (cube_vertices[v2].x - cube_vertices[v1].x)*r;
 						tri_ver.pos.y = cube_vertices[v1].y + (cube_vertices[v2].y - cube_vertices[v1].y)*r;
 						tri_ver.pos.z = cube_vertices[v1].z + (cube_vertices[v2].z - cube_vertices[v1].z)*r;
-						Vector3f col = { (GetRand() + 1.0f)/2, (GetRand() + 1.0f)/2, (GetRand() + 1.0f)/2 };
-						tri_ver.color = col;
 						mc_vertices.push_back(tri_ver);
 					}
+
+					// Вычисление нормали треугольника.
+					Vector3f n = NormalFrom3Points( (mc_vertices.end() - 3)->pos,  (mc_vertices.end() - 2)->pos, (mc_vertices.end() - 1)->pos );
+					(mc_vertices.end() - 3)->nor = n;
+					(mc_vertices.end() - 2)->nor = n;
+					(mc_vertices.end() - 1)->nor = n;
+
 				}
 				vec3.x += cubeSize;
 			}
@@ -462,9 +482,11 @@ static void AddMarchingObject(GLuint width, GLuint height, GLuint depth, GLfloat
 		vec3.y += cubeSize;
 	}
 
+	// Сглаживание нормалей.
+
 	glGenBuffers(1, &gSceneParams.VerBuffer[1]);
 	glBindBuffer(GL_ARRAY_BUFFER, gSceneParams.VerBuffer[1]);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex_Pos_Col)*mc_vertices.size(), &mc_vertices[0], GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex_Pos_Nor)*mc_vertices.size(), &mc_vertices[0], GL_STATIC_DRAW);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	gSceneParams.BufferVerCount[1] = mc_vertices.size();
 }
@@ -522,4 +544,13 @@ static void MouseWheelHandler(GLint pos){
 			gSceneParams.cam.SetRadius( 1.0f );
 	}
 	WheelPrevPos = WheelCurrentPos;
+}
+
+static Vector3f NormalFrom3Points(Vector3f v1, Vector3f v2, Vector3f v3){
+	Vector3f e1, e2, n;
+	Vec3Sub(e1, v2, v1);
+	Vec3Sub(e2, v3, v1);
+	Vec3CrossProduct(n, e1, e2);
+	Vec3Normalize(n);
+	return n;
 }
