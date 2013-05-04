@@ -11,12 +11,15 @@
 using namespace std;
 
 const GLfloat SceneParameters::PI;
+const GLfloat SceneParameters::PI_OVER_TWO;
+
 SceneParameters gSceneParams;
 static void AddGridToScene(GLfloat gridCellSize, GLint CellCount);
-static void AddCube();
 // Случайное число в диапазоне [-1,1].
 static GLfloat GetRand(){ return (rand()/float(RAND_MAX))*2 - 1.0f; }
 static void AddMarchingObject(GLuint width, GLuint height, GLuint depth, GLfloat cubeSize);
+static void InputHandler(GLfloat deltaTime);
+static void MouseWheelHandler(GLint pos);
 
 int InitGL(int winWidth, int winHeight, int glver_major, int glver_minor){
 	if( !glfwInit() ){
@@ -64,6 +67,8 @@ int InitGL(int winWidth, int winHeight, int glver_major, int glver_minor){
 
 int InitScene(){
 	glfwSetWindowTitle("Marching Cubes");
+	glfwSetMouseWheelCallback( MouseWheelHandler );
+
 	//glfwEnable(GLFW_STICKY_KEYS);
 	gSceneParams.ratio = gSceneParams.winWidth/(float)gSceneParams.winHeight;
 	gSceneParams.cam = Camera();
@@ -81,8 +86,6 @@ int InitScene(){
 	gSceneParams.gridShaderPVWRef = glGetUniformLocation(gSceneParams.shader[0], "mPVW");
 
 	AddGridToScene(1.0f, 10);
-	AddCube();
-	//AddMarchingObject(4, 3, 5, 1.0f);
 	GLuint s = 64;
 	AddMarchingObject(s,s,s, 1.0f);
 	return 1;
@@ -240,39 +243,7 @@ void UpdateScene(){
 	static double lastTime = glfwGetTime();
 	GLfloat deltaTime = glfwGetTime() - lastTime;
 
-	if( glfwGetKey(GLFW_KEY_LEFT) == GLFW_PRESS )
-		gSceneParams.cam.SetAlpha( gSceneParams.cam.GetAlpha() + 3*deltaTime );
-
-	if( glfwGetKey(GLFW_KEY_RIGHT) == GLFW_PRESS )
-		gSceneParams.cam.SetAlpha( gSceneParams.cam.GetAlpha() - 3*deltaTime );
-
-	if( glfwGetKey(GLFW_KEY_UP) == GLFW_PRESS )
-		if( (gSceneParams.cam.GetBeta() + 3.0f*deltaTime) < gSceneParams.PI/2.0f )
-			gSceneParams.cam.SetBeta( gSceneParams.cam.GetBeta() + 3*deltaTime );
-
-	if( glfwGetKey(GLFW_KEY_DOWN) == GLFW_PRESS )
-		if( (gSceneParams.cam.GetBeta() - 3.0f*deltaTime) > -gSceneParams.PI/2.0f )
-			gSceneParams.cam.SetBeta( gSceneParams.cam.GetBeta() - 3*deltaTime );
-	gSceneParams.cam.CalculatePV();
-
-	static bool wireSwitch = true;
-	static bool OneKeyPrevState = false;
-	if( glfwGetKey('1') == GLFW_PRESS ){
-		if( !OneKeyPrevState ){
-			OneKeyPrevState = true;
-			if( wireSwitch ){
-				glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-				glDisable(GL_CULL_FACE);
-				wireSwitch ^= 1;
-			}
-			else{
-				glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-				glEnable(GL_CULL_FACE);
-				wireSwitch ^= 1;
-			}
-		}
-	}
-	else OneKeyPrevState = false;
+	InputHandler(deltaTime);
 
 	lastTime = glfwGetTime();
 	// Вычисление FPS.
@@ -375,65 +346,6 @@ static void AddGridToScene(GLfloat gridCellSize, GLint CellCount){
 	glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex_Pos_Col)*verCount, gridVers, GL_STATIC_DRAW);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	gSceneParams.BufferVerCount[0] = verCount;
-}
-
-static void AddCube(){
-	GLuint edge_to_points[12][2] = { {0,1}, {1,2}, {2,3}, {3,0},
-									 {4,5}, {5,6}, {6,7}, {7,4},
-									 {0,4}, {1,5}, {2,6}, {3,7} };
-
-	GLfloat d = 1.0f;
-	Vertex_Pos_Col vertices[8] = {
-		{ -d,-d, d, 1,1,0 },
-		{ -d, d, d, 0,1,0 },
-		{  d, d, d, 0,1,0 },
-		{  d,-d, d, 1,1,0 },
-		{ -d,-d,-d, 1,1,0 },
-		{ -d, d,-d, 0,1,0 },
-		{  d, d,-d, 0,1,0 },
-		{  d,-d,-d, 1,1,0 },
-	};
-
-	GLfloat vd[8];
-	srand(time(0));
-	for(int i = 0; i < 8; i++)
-		vd[i] = GetRand();
-	unsigned char cube_case = 0;
-	for(int i = 0; i < 8; i++)
-		if( vd[i] > 0.0f )
-			cube_case |= (1 << i);
-	
-	GLuint triNum = case_to_polygon_num[cube_case];
-	GLuint verNum = triNum*3;
-	Vertex_Pos_Col triangles[verNum];
-	GLuint v = 0;
-	for(int i = 0; i < triNum; i++){
-		GLuint e[3] = { case_edges[cube_case][i][0],
-						case_edges[cube_case][i][1],
-						case_edges[cube_case][i][2] };
-
-		for(int j = 0; j < 3; j++){
-			GLuint v1 = edge_to_points[e[j]][0];
-			GLuint v2 = edge_to_points[e[j]][1];
-
-			triangles[v].pos.x = vertices[v1].pos.x + (vertices[v2].pos.x - vertices[v1].pos.x)*
-								  fabs(vd[v1])/(fabs(vd[v1]) + fabs(vd[v2]));
-			triangles[v].pos.y = vertices[v1].pos.y + (vertices[v2].pos.y - vertices[v1].pos.y)*
-								  fabs(vd[v1])/(fabs(vd[v1]) + fabs(vd[v2]));
-			triangles[v].pos.z = vertices[v1].pos.z + (vertices[v2].pos.z - vertices[v1].pos.z)*
-								  fabs(vd[v1])/(fabs(vd[v1]) + fabs(vd[v2]));
-			triangles[v].color.x = (vertices[v1].color.x + vertices[v2].color.x)/2.0f;
-			triangles[v].color.y = (vertices[v1].color.y + vertices[v2].color.y)/2.0f;
-			triangles[v].color.z = (vertices[v1].color.z + vertices[v2].color.z)/2.0f;
-			v++;
-		}
-	}
-
-	glGenBuffers(1, &gSceneParams.VerBuffer[1]);
-	glBindBuffer(GL_ARRAY_BUFFER, gSceneParams.VerBuffer[1]);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex_Pos_Col)*verNum, triangles, GL_STATIC_DRAW);
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	gSceneParams.BufferVerCount[1] = verNum;
 }
 
 static void AddMarchingObject(GLuint width, GLuint height, GLuint depth, GLfloat cubeSize){
@@ -563,4 +475,51 @@ void ReleaseSceneResources(){
 	glDeleteBuffers(1, &gSceneParams.VerBuffer[0]);
 	glDeleteBuffers(1, &gSceneParams.VerBuffer[1]);
 	glDeleteProgram(gSceneParams.shader[0]);
+}
+
+static void InputHandler(GLfloat deltaTime){
+	if( glfwGetKey(GLFW_KEY_LEFT) == GLFW_PRESS )
+		gSceneParams.cam.SetAlpha( gSceneParams.cam.GetAlpha() + 3*deltaTime );
+
+	if( glfwGetKey(GLFW_KEY_RIGHT) == GLFW_PRESS )
+		gSceneParams.cam.SetAlpha( gSceneParams.cam.GetAlpha() - 3*deltaTime );
+
+	if( glfwGetKey(GLFW_KEY_UP) == GLFW_PRESS )
+		if( (gSceneParams.cam.GetBeta() + 3.0f*deltaTime) < gSceneParams.PI_OVER_TWO )
+			gSceneParams.cam.SetBeta( gSceneParams.cam.GetBeta() + 3*deltaTime );
+
+	if( glfwGetKey(GLFW_KEY_DOWN) == GLFW_PRESS )
+		if( (gSceneParams.cam.GetBeta() - 3.0f*deltaTime) > -gSceneParams.PI_OVER_TWO )
+			gSceneParams.cam.SetBeta( gSceneParams.cam.GetBeta() - 3*deltaTime );
+	gSceneParams.cam.CalculatePV();
+
+	static bool wireSwitch = true;
+	static bool OneKeyPrevState = false;
+	if( glfwGetKey('1') == GLFW_PRESS ){
+		if( !OneKeyPrevState ){
+			OneKeyPrevState = true;
+			if( wireSwitch ){
+				glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+				wireSwitch ^= 1;
+			}
+			else{
+				glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+				wireSwitch ^= 1;
+			}
+		}
+	}
+	else OneKeyPrevState = false;
+}
+
+static void MouseWheelHandler(GLint pos){
+	static GLint WheelPrevPos = 0;
+	GLint WheelCurrentPos = glfwGetMouseWheel();
+	if( WheelCurrentPos != WheelPrevPos ){
+		gSceneParams.cam.SetRadius( 
+				gSceneParams.cam.GetRadius() + (WheelPrevPos - WheelCurrentPos)
+				);
+		if( gSceneParams.cam.GetRadius() < 1.0f )
+			gSceneParams.cam.SetRadius( 1.0f );
+	}
+	WheelPrevPos = WheelCurrentPos;
 }

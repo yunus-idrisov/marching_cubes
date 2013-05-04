@@ -6,6 +6,7 @@
 
 struct SceneParameters{
 	static const GLfloat PI = 3.14159f;
+	static const GLfloat PI_OVER_TWO = 1.57080f;
 	// Window
 	GLuint		winWidth;
 	GLuint		winHeight;
