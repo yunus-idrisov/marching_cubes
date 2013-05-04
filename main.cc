@@ -1,7 +1,5 @@
 #include <iostream>
-#include <GL/gl.h>
 #include <GL/glfw.h>
-#include <stdio.h>
 #include "HelperFuns.h"
 using namespace std;
 

@@ -41,11 +41,6 @@ int InitScene();
 // При ошибке возвращается 0.
 GLuint CreateProgram(const char *vertex_shader_path, const char *fragment_shader_path);
 
-// Функция для создания текстуры OpenGL из bmp
-// файла с альфа каналом.
-// При ошибке возвращается 0.
-GLuint LoadBMP(const char* filePath);
-
 // Функция для обновления сцены.
 void UpdateScene();
 

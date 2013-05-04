@@ -6,7 +6,7 @@ Camera::Camera(){
 	fov = gSceneParams.PI/4;
 	ratio = gSceneParams.ratio;
 	near = 0.1f;
-	far = 30.0f;
+	far = 100.0f;
 
 	eye.x = eye.y = eye.z = 10.0f;
 	target.x = target.y = target.z = 0.0f;
