@@ -3,14 +3,13 @@
 #include <GL/gl.h>
 #include "Math.h"
 
-// Сфера.
-GLfloat Density_Fun1(const Vector3f& p,
-					 GLuint xnum, GLuint ynum, GLuint znum, 
-					 GLfloat cubeSize);
-
-// Отдаленно напоминает сыр.
-GLfloat Density_Fun2(const Vector3f& p,
-					 GLuint xnum, GLuint ynum, GLuint znum, 
-					 GLfloat cubeSize);
+// Город.
+// Если последний параметр функции DensityFun() true, то
+// происходит генерация случайных значений, на основе которых
+// в дальнейшем и происходит генерация плотности.
+GLfloat Density_Fun(const Vector3f& p,
+					GLuint xnum, GLuint ynum, GLuint znum, 
+					GLfloat cubeSize,
+					bool toRand);
 
 #endif // DENSITYFUNS_H

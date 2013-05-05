@@ -14,9 +14,6 @@ const GLfloat SceneParameters::PI;
 const GLfloat SceneParameters::PI_OVER_TWO;
 
 SceneParameters gSceneParams;
-static void AddGridToScene(GLfloat gridCellSize, GLint CellCount);
-// Случайное число в диапазоне [-1,1].
-static GLfloat GetRand(){ return (rand()/float(RAND_MAX))*2 - 1.0f; }
 
 // Функция для генерации объекта из кубов.
 // xnum, ynum, znum - количество кубов по осям Ox, Oy, Oz соответственно.
@@ -25,7 +22,7 @@ static void AddMarchingObject(GLuint xnum, GLuint ynum, GLuint znum, GLfloat cub
 
 static void InputHandler(GLfloat deltaTime);
 static void MouseWheelHandler(GLint pos);
-static Vector3f NormalFrom3Points(Vector3f v1, Vector3f v2, Vector3f v3);
+static Vector3f NormalFrom3Points(const Vector3f& v1,const Vector3f& v2,const Vector3f& v3);
 
 int InitGL(int winWidth, int winHeight, int glver_major, int glver_minor){
 	if( !glfwInit() ){
@@ -49,11 +46,6 @@ int InitGL(int winWidth, int winHeight, int glver_major, int glver_minor){
 
 	glViewport(0, 0, winWidth, winHeight);
 
-	// Сетка.
-	//glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
-	// Обычный режим.
-	//glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
-
 	glEnable(GL_CULL_FACE);
 	glCullFace(GL_BACK);
 	glFrontFace(GL_CCW);
@@ -76,6 +68,7 @@ int InitScene(){
 	glfwSetMouseWheelCallback( MouseWheelHandler );
 
 	//glfwEnable(GLFW_STICKY_KEYS);
+	gSceneParams.VerBuffer[0] = 0;
 	gSceneParams.ratio = gSceneParams.winWidth/(float)gSceneParams.winHeight;
 	gSceneParams.cam = Camera();
 	// Создаём VertexArray.
@@ -83,25 +76,17 @@ int InitScene(){
 	glBindVertexArray(gSceneParams.vertexArrayID);
 
 	// Создаём шейдеры.
-	gSceneParams.shader[0] = CreateProgram("grid.vs", "grid.fs");
+	gSceneParams.shader[0] = CreateProgram("mar_cubes.vs", "mar_cubes.fs");
 	if( gSceneParams.shader[0] == 0 ){
 		cerr <<  "Failed to create shader." << endl;
 		return -1;
 	}
-	gSceneParams.gridShaderPVWRef = glGetUniformLocation(gSceneParams.shader[0], "mPVW");
-
-	gSceneParams.shader[1] = CreateProgram("mar_cubes.vs", "mar_cubes.fs");
-	if( gSceneParams.shader[1] == 0 ){
-		cerr <<  "Failed to create shader." << endl;
-		return -1;
-	}
-	gSceneParams.mcShaderPVW_Ref = glGetUniformLocation(gSceneParams.shader[1], "mPVW");
-	gSceneParams.mcShaderW_Ref = glGetUniformLocation(gSceneParams.shader[1], "mW");
+	gSceneParams.mcShaderPVW_Ref = glGetUniformLocation(gSceneParams.shader[0], "mPVW");
+	gSceneParams.mcShaderW_Ref = glGetUniformLocation(gSceneParams.shader[0], "mW");
+	gSceneParams.mcShaderEye_Ref = glGetUniformLocation(gSceneParams.shader[0], "Eye");
 	Mat4x4Identity( gSceneParams.mcW );
 
-	AddGridToScene(1.0f, 10);
-	GLuint s = 64;
-	AddMarchingObject(s,s/2,s, 0.1f);
+	AddMarchingObject(128,64,128, 0.1f);
 	return 1;
 }
 
@@ -126,32 +111,20 @@ void UpdateScene(){
 void RenderScene(){
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	
-	// Сначала рендерим сетку.
+	Mat4x4 PVW = gSceneParams.cam.GetPV();
+	Mat4x4Mult(PVW, PVW, gSceneParams.mcW);
+
 	glUseProgram( gSceneParams.shader[0] );
 	glEnableVertexAttribArray(0);
 	glEnableVertexAttribArray(1);
 	glBindBuffer(GL_ARRAY_BUFFER, gSceneParams.VerBuffer[0]);
-	glUniformMatrix4fv( gSceneParams.gridShaderPVWRef, 1, GL_TRUE, gSceneParams.cam.GetPV().m );
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex_Pos_Col), (void*)0);
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex_Pos_Col), (void*)(sizeof(GLfloat)*3));
-	glDrawArrays(GL_LINES, 0, gSceneParams.BufferVerCount[0]);
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	glDisableVertexAttribArray(0);
-	glDisableVertexAttribArray(1);
-	glUseProgram( 0 );
-
-	Mat4x4 PVW = gSceneParams.cam.GetPV();
-	Mat4x4Mult(PVW, PVW, gSceneParams.mcW);
-	// Теперь кубы.
-	glUseProgram( gSceneParams.shader[1] );
-	glEnableVertexAttribArray(0);
-	glEnableVertexAttribArray(1);
-	glBindBuffer(GL_ARRAY_BUFFER, gSceneParams.VerBuffer[1]);
 	glUniformMatrix4fv( gSceneParams.mcShaderPVW_Ref, 1, GL_TRUE, PVW.m );
 	glUniformMatrix4fv( gSceneParams.mcShaderW_Ref, 1, GL_TRUE, gSceneParams.mcW.m );
+	Vector3f EyePos = gSceneParams.cam.GetEye();
+	glUniform3f( gSceneParams.mcShaderEye_Ref, EyePos.x, EyePos.y, EyePos.z );
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex_Pos_Nor), (void*)0);
 	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex_Pos_Nor), (void*)(sizeof(GLfloat)*3));
-	glDrawArrays(GL_TRIANGLES, 0, gSceneParams.BufferVerCount[1]);
+	glDrawArrays(GL_TRIANGLES, 0, gSceneParams.BufferVerCount[0]);
 
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glDisableVertexAttribArray(0);
@@ -159,65 +132,6 @@ void RenderScene(){
 	glUseProgram( 0 );
 }
 
-static void AddGridToScene(GLfloat gridCellSize, GLint CellCount){
-	if( CellCount < 2 )
-		CellCount = 2;
-	if( (CellCount % 2) != 0 )
-		CellCount++;
-	GLint cc = CellCount;
-	GLuint verCount = 2*2*(cc+1);
-
-	Vertex_Pos_Col gridVers[verCount];
-	for(int i = 0; i < verCount; i++){
-		gridVers[i].pos.y = 0.0f;
-
-		gridVers[i].color.x = 0.3f;
-		gridVers[i].color.y = 0.3f;
-		gridVers[i].color.z = 0.3f;
-	}
-
-	GLfloat t = -(cc/2)*gridCellSize;
-	GLuint v = 0;
-	for(int i = 0; i <= cc; i++){
-		gridVers[v].pos.x = t + i*gridCellSize;
-		gridVers[v].pos.z = t;
-		v++;
-		gridVers[v].pos.x = t + i*gridCellSize;
-		gridVers[v].pos.z = -t;
-		v++;
-	}
-
-	for(int i = 0; i <= cc; i++){
-		gridVers[v].pos.x = t; 
-		gridVers[v].pos.z = t + i*gridCellSize;
-		v++;             
-		gridVers[v].pos.x = -t;
-		gridVers[v].pos.z =  t + i*gridCellSize;
-		v++;
-	}
-
-	gridVers[cc].color.x = 0.0f;
-	gridVers[cc].color.y = 0.0f;
-	gridVers[cc].color.z = 1.0f;
-	gridVers[cc+1].color.x = 0.0f;
-	gridVers[cc+1].color.y = 0.0f;
-	gridVers[cc+1].color.z = 1.0f;
-
-	gridVers[cc + verCount/2].color.x = 1.0f;
-	gridVers[cc + verCount/2].color.y = 0.0f;
-	gridVers[cc + verCount/2].color.z = 0.0f;
-	gridVers[cc + verCount/2+1].color.x = 1.0f;
-	gridVers[cc + verCount/2+1].color.y = 0.0f;
-	gridVers[cc + verCount/2+1].color.z = 0.0f;
-
-	glGenBuffers(1, &gSceneParams.VerBuffer[0]);
-	glBindBuffer(GL_ARRAY_BUFFER, gSceneParams.VerBuffer[0]);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex_Pos_Col)*verCount, gridVers, GL_STATIC_DRAW);
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	gSceneParams.BufferVerCount[0] = verCount;
-}
-
-//static void AddMarchingObject(GLuint width, GLuint height, GLuint depth, GLfloat cubeSize){
 static void AddMarchingObject(GLuint xnum, GLuint ynum, GLuint znum, GLfloat cubeSize){
 	if( cubeSize <= 0.0f )
 		cubeSize = 1.0f;
@@ -226,26 +140,27 @@ static void AddMarchingObject(GLuint xnum, GLuint ynum, GLuint znum, GLfloat cub
 	if( znum == 0 ) znum++;
 
 	GLuint verNum = (xnum+1)*(ynum+1)*(znum+1);
-
-	// depth - y, znum - z, width - x.
-	//GLfloat ver_den[verNum]; // плотность в каждой точке.
 	GLfloat* ver_den = new GLfloat[verNum]; // плотность в каждой точке.
 
 	GLfloat x_init = -(GLfloat)xnum/2*cubeSize;
 	GLfloat y_init = -(GLfloat)ynum/2*cubeSize;
 	GLfloat z_init =  (GLfloat)znum/2*cubeSize;
+	Vector3f vec3 = {x_init, y_init, z_init};
 
 	GLfloat x,y = y_init,z;
+	// Если последний параметр функции DensityFun() true, то
+	// происходит генерация случайных значений, на основе которых
+	// в дальнейшем и происходит генерация плотности.
+	Density_Fun(vec3,0,0,0,0, true);
 	for(int i = 0; i <= ynum; i++){
 		z =  z_init;
 		for(int j = 0; j <= znum; j++){
 			x = x_init;
 			for(int k = 0; k <= xnum; k++){
-				Vector3f vec3 = {x, y, z};
+				Vector3f v = {x, y, z};
 				GLuint verCoord = i*(xnum+1)*(znum+1) + j*(xnum+1) + k;
 
-				ver_den[verCoord] = Density_Fun2(vec3, xnum, ynum, znum, cubeSize);
-
+				ver_den[verCoord] = Density_Fun(v, xnum, ynum, znum, cubeSize, false);
 				x += cubeSize;
 			}
 			z -= cubeSize;
@@ -259,7 +174,6 @@ static void AddMarchingObject(GLuint xnum, GLuint ynum, GLuint znum, GLfloat cub
 	Vector3f cube_vertices[8];
 	GLfloat  cube_den[8];
 	vector<Vertex_Pos_Nor> mc_vertices;
-	Vector3f vec3 = {x_init, y_init, z_init};
 	for(int i = 0; i < ynum; i++){
 		vec3.z =  z_init;
 		for(int j = 0; j < znum; j++){
@@ -326,7 +240,6 @@ static void AddMarchingObject(GLuint xnum, GLuint ynum, GLuint znum, GLfloat cub
 					(mc_vertices.end() - 3)->nor = n;
 					(mc_vertices.end() - 2)->nor = n;
 					(mc_vertices.end() - 1)->nor = n;
-
 				}
 				vec3.x += cubeSize;
 			}
@@ -335,14 +248,14 @@ static void AddMarchingObject(GLuint xnum, GLuint ynum, GLuint znum, GLfloat cub
 		vec3.y += cubeSize;
 	}
 
-	cout << "Vertices: " << mc_vertices.size() << endl;
-	// Сглаживание нормалей.
+	if( gSceneParams.VerBuffer[0] != 0 )
+		glDeleteBuffers(1, &gSceneParams.VerBuffer[0]);
 
-	glGenBuffers(1, &gSceneParams.VerBuffer[1]);
-	glBindBuffer(GL_ARRAY_BUFFER, gSceneParams.VerBuffer[1]);
+	glGenBuffers(1, &gSceneParams.VerBuffer[0]);
+	glBindBuffer(GL_ARRAY_BUFFER, gSceneParams.VerBuffer[0]);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex_Pos_Nor)*mc_vertices.size(), &mc_vertices[0], GL_STATIC_DRAW);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	gSceneParams.BufferVerCount[1] = mc_vertices.size();
+	gSceneParams.BufferVerCount[0] = mc_vertices.size();
 
 	delete [] ver_den;
 }
@@ -445,7 +358,6 @@ void ReleaseSceneResources(){
 	glDeleteVertexArrays(1, &gSceneParams.vertexArrayID);
 
 	glDeleteBuffers(1, &gSceneParams.VerBuffer[0]);
-	glDeleteBuffers(1, &gSceneParams.VerBuffer[1]);
 	glDeleteProgram(gSceneParams.shader[0]);
 }
 
@@ -465,22 +377,13 @@ static void InputHandler(GLfloat deltaTime){
 			gSceneParams.cam.SetBeta( gSceneParams.cam.GetBeta() - 3*deltaTime );
 	gSceneParams.cam.CalculatePV();
 
-	static bool wireSwitch = true;
-	static bool OneKeyPrevState = false;
-	if( glfwGetKey('1') == GLFW_PRESS ){
-		if( !OneKeyPrevState ){
-			OneKeyPrevState = true;
-			if( wireSwitch ){
-				glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-				wireSwitch ^= 1;
-			}
-			else{
-				glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-				wireSwitch ^= 1;
-			}
-		}
+	static bool RKeyPrevState = false;
+	if( glfwGetKey('R') == GLFW_PRESS ){
+		if( !RKeyPrevState )
+			AddMarchingObject(128,64,128,0.1f);
+		RKeyPrevState = true;
 	}
-	else OneKeyPrevState = false;
+	else RKeyPrevState = false;
 }
 
 static void MouseWheelHandler(GLint pos){
@@ -496,7 +399,7 @@ static void MouseWheelHandler(GLint pos){
 	WheelPrevPos = WheelCurrentPos;
 }
 
-static Vector3f NormalFrom3Points(Vector3f v1, Vector3f v2, Vector3f v3){
+static Vector3f NormalFrom3Points(const Vector3f& v1,const Vector3f& v2,const Vector3f& v3){
 	Vector3f e1, e2, n;
 	Vec3Sub(e1, v2, v1);
 	Vec3Sub(e2, v3, v1);

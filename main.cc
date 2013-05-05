@@ -4,7 +4,7 @@
 using namespace std;
 
 int main(int argc, char* argv[]){
-	if( InitGL(800, 600, 3, 3) == -1 ){
+	if( InitGL(1024, 768, 3, 3) == -1 ){
 		cerr << "Failed to initialize OpenGL" << endl;
 		return -1;
 	}

@@ -13,17 +13,17 @@ struct SceneParameters{
 	GLfloat		ratio;		  // winWidth/winHeight
 
 	GLuint		vertexArrayID;
-	GLuint		shader[2];
-	GLuint		gridShaderPVWRef;
+	GLuint		shader[1];
 
 	GLuint		mcShaderPVW_Ref;
 	GLuint		mcShaderW_Ref;
+	GLuint		mcShaderEye_Ref;
 	Mat4x4		mcW;
 
-	GLuint		VerBuffer[2];
-	GLuint		BufferVerCount[2];
+	GLuint		VerBuffer[1];
+	GLuint		BufferVerCount[1];
 
-	Camera cam;
+	Camera		cam;
 };
 
 extern SceneParameters gSceneParams;
@@ -44,16 +44,11 @@ GLuint CreateProgram(const char *vertex_shader_path, const char *fragment_shader
 // Функция для обновления сцены.
 void UpdateScene();
 
-// Функция для рендеринга всей сцены.
+// Функция для рендеринга сцены.
 void RenderScene();
 
 // Очистка.
 void ReleaseSceneResources();
-
-struct Vertex_Pos_Col{
-	Vector3f pos;
-	Vector3f color;
-};
 
 struct Vertex_Pos_Nor{
 	Vector3f pos;
